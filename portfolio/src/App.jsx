@@ -447,7 +447,7 @@ export default function Portfolio() {
 
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div className="w-56 h-56 rounded-2xl overflow-hidden shadow-2xl border border-white/20">
-              <img src={home.profileImage || "/default-profile.png"} alt={home.name} className="object-cover w-full h-full" />
+              <img src="/Hariom-Photo.png" alt={home.name} className="object-cover w-full h-full" />
             </div>
           </motion.div>
         </section>
