@@ -9,8 +9,8 @@ import { ReactTyped as Typed } from "react-typed";
 
 export default function Portfolio() {
   const SHEET_ID = import.meta.env.VITE_SHEET_ID;
-  // API_KEY no longer needed for CSV endpoint
-  
+  const API_KEY = import.meta.env.VITE_API_KEY;
+
   const [home, setHome] = useState({});
   const [about, setAbout] = useState({});
   const [skills, setSkills] = useState([]);
@@ -36,46 +36,12 @@ export default function Portfolio() {
   };
 
   const fetchTab = async (tabName) => {
-    try {
-      // Use published CSV endpoint instead of API key to avoid referrer restrictions
-      // Format: https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={TAB_NAME}
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-      console.debug("Fetching Google Sheet CSV:", csvUrl);
-      
-      const res = await fetch(csvUrl);
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(`CSV fetch returned ${res.status}:`, text);
-        return [];
-      }
-      
-      const csvText = await res.text();
-      console.debug(`CSV response for ${tabName}:`, csvText.substring(0, 200) + "...");
-      
-      // Parse CSV manually
-      const lines = csvText.split('\n').filter(line => line.trim());
-      if (lines.length === 0) return [];
-      
-      // Parse header row (remove quotes and handle commas)
-      const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-      
-      // Parse data rows
-      const rows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
-        const obj = {};
-        headers.forEach((h, i) => {
-          if (h) obj[h] = values[i] || "";
-        });
-        return obj;
-      });
-      
-      console.debug(`Parsed ${rows.length} rows for ${tabName}:`, rows);
-      return rows;
-      
-    } catch (err) {
-      console.error("fetchTab error for", tabName, err);
-      return [];
-    }
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${tabName}?alt=json&key=${API_KEY}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.values) return [];
+    const [headers, ...rows] = data.values;
+    return rows.map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i]])));
   };
 
   useEffect(() => {
@@ -111,51 +77,31 @@ export default function Portfolio() {
       {/* Top Header with Logo */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-          {/* Social / Contact Icons */}
-          <div className="flex gap-2 items-center">
-            {/* Email */}
-            <a
-              href="mailto:hariom8885sharma@gmail.com"
-              aria-label="Email"
-              className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center hover:bg-blue-600 transition-colors"
-            >
+          {/* Social Media Icons */}
+          <div className="flex gap-2">
+            {home.linkedin && (
+              <a href={home.linkedin} target="_blank" rel="noreferrer" className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center">
+                <FaLinkedin className="text-white text-sm" />
+              </a>
+            )}
+            {home.github && (
+              <a href={home.github} target="_blank" rel="noreferrer" className="w-8 h-8 bg-gray-800 rounded flex items-center justify-center">
+                <FaGithub className="text-white text-sm" />
+              </a>
+            )}
+            <div className="w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
               <FaEnvelope className="text-white text-sm" />
-            </a>
-            
-            {/* LinkedIn */}
-            <a 
-              href="https://www.linkedin.com/in/hari-om63/" 
-              target="_blank" 
-              rel="noreferrer" 
-              aria-label="LinkedIn" 
-              className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center hover:bg-blue-700 transition-colors"
-            >
-              <FaLinkedin className="text-white text-sm" />
-            </a>
-            
-            {/* GitHub */}
-            <a 
-              href="https://github.com/jack-hariom" 
-              target="_blank" 
-              rel="noreferrer" 
-              aria-label="GitHub" 
-              className="w-8 h-8 bg-gray-800 rounded flex items-center justify-center hover:bg-gray-900 transition-colors"
-            >
-              <FaGithub className="text-white text-sm" />
-            </a>
+            </div>
           </div>
           
-          {/* IIT Madras Logo and Text + Resume download */}
+          {/* IIT Madras Logo and Text */}
           <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
+            <div className="text-right">
               <div className="text-gray-800 font-bold text-lg">भारतीय प्रौद्योगिकी संस्थान मद्रास</div>
               <div className="text-gray-700 text-base">Indian Institute of Technology Madras</div>
             </div>
-            <div className="flex items-center gap-3">
-              <img src="/iitm-logo.png" alt="IIT Madras" className="w-16 h-16 object-contain" />
-              <a href="/HariomCV.pdf" download className="ml-2 inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
-                <FaDownload /> Resume
-              </a>
+            <div className="w-16 h-16 bg-blue-900 rounded-full flex items-center justify-center">
+              <div className="text-white font-bold text-xs">IIT-M</div>
             </div>
           </div>
         </div>
@@ -206,7 +152,7 @@ export default function Portfolio() {
           <div className="bg-white border border-gray-300 rounded p-6">
             <div className="w-48 h-48 mx-auto mb-4 border-2 border-gray-300 rounded overflow-hidden">
               <img 
-                src="/Hariom-Photo.jpg" 
+                src="/Hariom-Photo.png" 
                 alt={home.name} 
                 className="w-full h-full object-cover"
               />
@@ -219,12 +165,12 @@ export default function Portfolio() {
               <div>
                 <strong>Email:</strong> 
                 <a href={`mailto:${contact.email}`} className="text-blue-600 ml-1">
-                  {contact.email || "hariom8885sharma@gmail.com"}
+                  {contact.email || "hariom@iitm.ac.in"}
                 </a>
               </div>
               <div>
                 <strong>Office Phone:</strong> 
-                <span className="ml-1">{contact.phone || "+91-6388857763"}</span>
+                <span className="ml-1">{contact.phone || "+91-44-2257-XXXX"}</span>
               </div>
             </div>
           </div>
@@ -233,7 +179,7 @@ export default function Portfolio() {
           <div className="bg-white border border-gray-300 rounded">
             <div className="bg-red-800 text-white px-4 py-2 font-bold">Education</div>
             <div className="p-4">
-              <p className="text-sm text-gray-700">{about.education || "Bachelor of Science - Electronics Systems"}</p>
+              <p className="text-sm text-gray-700">{about.education || "B.Tech Electronics Engineering, M.Tech details"}</p>
             </div>
           </div>
 
@@ -256,10 +202,13 @@ export default function Portfolio() {
           <div className="bg-white border border-gray-300 rounded">
             <div className="bg-red-800 text-white px-4 py-2 font-bold">CV</div>
             <div className="p-4">
-              {/* Use public resume file for direct download */}
-              <a href="/HariomCV.pdf" download className="text-blue-600 text-sm inline-flex items-center gap-2">
-                <FaDownload /> Download CV
-              </a>
+              {home.resume ? (
+                <a href={home.resume} target="_blank" rel="noreferrer" className="text-blue-600 text-sm">
+                  Download CV
+                </a>
+              ) : (
+                <span className="text-gray-500 text-sm">CV Available on Request</span>
+              )}
             </div>
           </div>
         </div>
