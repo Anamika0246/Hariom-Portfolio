@@ -37,40 +37,77 @@ export default function Portfolio() {
 
   const fetchTab = async (tabName) => {
     try {
-      // Use published CSV endpoint instead of API key to avoid referrer restrictions
-      // Format: https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={TAB_NAME}
-      const csvUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
-      console.debug("Fetching Google Sheet CSV:", csvUrl);
-      
-      const res = await fetch(csvUrl);
-      if (!res.ok) {
-        const text = await res.text();
-        console.error(`CSV fetch returned ${res.status}:`, text);
+      if (!SHEET_ID) {
+        console.warn("SHEET_ID not set. Check .env file.");
         return [];
       }
+
+      // Try multiple endpoints for better compatibility
+      const endpoints = [
+        // Primary: CSV query endpoint
+        `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`,
+        // Fallback: Direct CSV export (requires sheet to be published)
+        `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0&sheet=${encodeURIComponent(tabName)}`
+      ];
+
+      for (let i = 0; i < endpoints.length; i++) {
+        const csvUrl = endpoints[i];
+        console.debug(`Attempt ${i + 1}: Fetching from:`, csvUrl);
+        
+        try {
+          const res = await fetch(csvUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/csv,text/plain,*/*'
+            }
+          });
+          
+          if (!res.ok) {
+            console.warn(`Endpoint ${i + 1} failed with status ${res.status}`);
+            continue; // Try next endpoint
+          }
+          
+          const csvText = await res.text();
+          console.debug(`CSV response for ${tabName} (${csvText.length} chars):`, csvText.substring(0, 200) + "...");
+          
+          // Check if we got actual CSV data
+          if (!csvText || csvText.includes('<html') || csvText.includes('<!DOCTYPE')) {
+            console.warn(`Endpoint ${i + 1} returned HTML instead of CSV - sheet may not be published`);
+            continue;
+          }
+          
+          // Parse CSV manually
+          const lines = csvText.split('\n').filter(line => line.trim());
+          if (lines.length === 0) {
+            console.warn(`No data lines found for ${tabName}`);
+            continue;
+          }
+          
+          // Parse header row (remove quotes and handle commas)
+          const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
+          
+          // Parse data rows
+          const rows = lines.slice(1).map(line => {
+            const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+            const obj = {};
+            headers.forEach((h, i) => {
+              if (h) obj[h] = values[i] || "";
+            });
+            return obj;
+          });
+          
+          console.debug(`Successfully parsed ${rows.length} rows for ${tabName}:`, rows);
+          return rows;
+          
+        } catch (fetchError) {
+          console.warn(`Endpoint ${i + 1} threw error:`, fetchError);
+          continue;
+        }
+      }
       
-      const csvText = await res.text();
-      console.debug(`CSV response for ${tabName}:`, csvText.substring(0, 200) + "...");
-      
-      // Parse CSV manually
-      const lines = csvText.split('\n').filter(line => line.trim());
-      if (lines.length === 0) return [];
-      
-      // Parse header row (remove quotes and handle commas)
-      const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim());
-      
-      // Parse data rows
-      const rows = lines.slice(1).map(line => {
-        const values = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
-        const obj = {};
-        headers.forEach((h, i) => {
-          if (h) obj[h] = values[i] || "";
-        });
-        return obj;
-      });
-      
-      console.debug(`Parsed ${rows.length} rows for ${tabName}:`, rows);
-      return rows;
+      // If all endpoints failed
+      console.error(`All endpoints failed for ${tabName}. Make sure the Google Sheet is published to web.`);
+      return [];
       
     } catch (err) {
       console.error("fetchTab error for", tabName, err);
@@ -89,6 +126,14 @@ export default function Portfolio() {
           fetchTab("Contact"),
           fetchTab("Theme"),
         ]);
+
+        console.log("📊 Fetched data summary:");
+        console.log("Home:", homeRes.length, "rows");
+        console.log("About:", aboutRes.length, "rows");
+        console.log("Skills:", skillsRes.length, "rows", skillsRes);
+        console.log("Projects:", projectsRes.length, "rows");
+        console.log("Contact:", contactRes.length, "rows");
+        console.log("Theme:", themeRes.length, "rows");
 
         setHome(homeRes[0] || {});
         setAbout(aboutRes[0] || {});
@@ -147,12 +192,12 @@ export default function Portfolio() {
           
           {/* IIT Madras Logo and Text + Resume download */}
           <div className="flex items-center gap-4">
-            <div className="text-right hidden sm:block">
+            {/* <div className="text-right hidden sm:block">
               <div className="text-gray-800 font-bold text-lg">भारतीय प्रौद्योगिकी संस्थान मद्रास</div>
               <div className="text-gray-700 text-base">Indian Institute of Technology Madras</div>
-            </div>
+            </div> */}
             <div className="flex items-center gap-3">
-              <img src="/iitm-logo.png" alt="IIT Madras" className="w-16 h-16 object-contain" />
+              {/* <img src="/iitm-logo.png" alt="IIT Madras" className="w-16 h-16 object-contain" /> */}
               <a href="/HariomCV.pdf" download className="ml-2 inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
                 <FaDownload /> Resume
               </a>
@@ -286,7 +331,7 @@ export default function Portfolio() {
                 onClick={() => setShowSkills(!showSkills)}
                 className="w-full text-left px-6 py-4 flex items-center justify-between hover:bg-gray-50"
               >
-                <span className="font-medium text-gray-900">+ Technical Skills</span>
+                <span className="font-medium text-gray-900">+ Technical Skills ({skills.length} categories)</span>
                 {showSkills ? <FaChevronUp /> : <FaChevronDown />}
               </button>
               {showSkills && (
@@ -295,20 +340,32 @@ export default function Portfolio() {
                   animate={{ opacity: 1 }}
                   className="px-6 pb-6"
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {skills.map((s, i) => (
-                      <div key={i} className="space-y-2">
-                        <h4 className="font-bold text-gray-900">{s.category}</h4>
-                        {s.items &&
-                          s.items.split(",").map((item, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
-                              <span className="w-2 h-2 bg-red-600 rounded-full"></span>
-                              <span>{item.trim()}</span>
-                            </div>
-                          ))}
-                      </div>
-                    ))}
-                  </div>
+                  {skills.length === 0 ? (
+                    <div className="text-gray-500 text-center py-4">
+                      No skills data loaded. Check console for errors.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {skills.map((s, i) => {
+                        console.debug('Skills row:', s); // Debug log
+                        return (
+                          <div key={i} className="space-y-2">
+                            <h4 className="font-bold text-gray-900">{s.category || 'Unknown Category'}</h4>
+                            {s.items && s.items.trim() ? (
+                              s.items.split(",").map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-2 text-sm text-gray-700">
+                                  <span className="w-2 h-2 bg-red-600 rounded-full"></span>
+                                  <span>{item.trim()}</span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-gray-400 text-sm">No items listed</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>
